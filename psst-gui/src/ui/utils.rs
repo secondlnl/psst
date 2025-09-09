@@ -71,6 +71,24 @@ impl<T: Data> Widget<T> for Spinner {
     }
 }
 
+pub fn stat_row<T: Data>(
+    label: &'static str,
+    value_func: impl Fn(&T) -> String + 'static,
+) -> impl Widget<WithCtx<T>> {
+    Flex::row()
+        .with_child(
+            Label::new(label)
+                .with_text_size(theme::TEXT_SIZE_SMALL)
+                .with_text_color(theme::PLACEHOLDER_COLOR),
+        )
+        .with_spacer(theme::grid(0.5))
+        .with_child(
+            Label::new(move |ctx: &WithCtx<T>, _env: &_| value_func(&ctx.data))
+                .with_text_size(theme::TEXT_SIZE_SMALL),
+        )
+        .align_left()
+}
+
 pub fn placeholder_widget<T: Data>() -> impl Widget<T> {
     SizedBox::empty().background(theme::BACKGROUND_DARK)
 }
@@ -106,7 +124,7 @@ pub fn error_widget() -> impl Widget<Error> {
 pub fn as_minutes_and_seconds(dur: Duration) -> String {
     let minutes = dur.as_secs() / 60;
     let seconds = dur.as_secs() % 60;
-    format!("{}∶{:02}", minutes, seconds)
+    format!("{minutes}∶{seconds:02}")
 }
 
 pub fn as_human(dur: Duration) -> String {
@@ -132,24 +150,6 @@ pub fn format_number_with_commas(n: i64) -> String {
         .collect::<Vec<_>>()
         // Join the chunks with commas.
         .join(",")
-}
-
-pub fn stat_row<T: Data>(
-    label: &'static str,
-    value_func: impl Fn(&T) -> String + 'static,
-) -> impl Widget<WithCtx<T>> {
-    Flex::row()
-        .with_child(
-            Label::new(label)
-                .with_text_size(theme::TEXT_SIZE_SMALL)
-                .with_text_color(theme::PLACEHOLDER_COLOR),
-        )
-        .with_spacer(theme::grid(0.5))
-        .with_child(
-            Label::new(move |ctx: &WithCtx<T>, _env: &_| value_func(&ctx.data))
-                .with_text_size(theme::TEXT_SIZE_SMALL),
-        )
-        .align_left()
 }
 
 pub struct InfoLayout<T, B, S> {

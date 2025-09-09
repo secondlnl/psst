@@ -89,7 +89,7 @@ impl WebApi {
                 let mut req = self
                     .agent
                     .get(request.build())
-                    .header("Authorization", &format!("Bearer {}", token));
+                    .header("Authorization", &format!("Bearer {token}"));
                 for header in request.get_headers() {
                     req = req.header(header.0, header.1);
                 }
@@ -100,20 +100,21 @@ impl WebApi {
             Method::Post => self
                 .agent
                 .post(request.build())
-                .header("Authorization", &format!("Bearer {}", token))
+                .header("Authorization", &format!("Bearer {token}"))
                 .send_json(request.get_body())
                 .map_err(|err| Error::WebApiError(err.to_string())),
             Method::Put => self
                 .agent
                 .put(request.build())
-                .header("Authorization", &format!("Bearer {}", token))
+                .header("Authorization", &format!("Bearer {token}"))
                 .send_json(request.get_body())
                 .map_err(|err| Error::WebApiError(err.to_string())),
             Method::Delete => self
                 .agent
                 .delete(request.build())
-                .header("Authorization", &format!("Bearer {}", token))
-                .call()
+                .header("Authorization", &format!("Bearer {token}"))
+                .force_send_body()
+                .send_json(request.get_body())
                 .map_err(|err| Error::WebApiError(err.to_string())),
         }
     }
@@ -293,7 +294,7 @@ impl WebApi {
             .lock()
             .load_tracks_for_user(username)
         {
-            log::error!("failed to read local tracks: {}", err);
+            log::error!("failed to read local tracks: {err}");
         }
     }
 
@@ -459,7 +460,7 @@ impl WebApi {
         let result: Welcome = match self.load(request) {
             Ok(res) => res,
             Err(e) => {
-                info!("Error loading home section: {}", e);
+                info!("Error loading home section: {e}");
                 return Err(e);
             }
         };
@@ -542,6 +543,7 @@ impl WebApi {
                                     ),
                                 },
                                 collaborative: false,
+                                public: None,
                             });
                         }
                         DataTypename::Artist => artist.push_back(Artist {
@@ -705,14 +707,14 @@ impl WebApi {
 impl WebApi {
     // https://developer.spotify.com/documentation/web-api/reference/get-artist/
     pub fn get_artist(&self, id: &str) -> Result<Artist, Error> {
-        let request = &RequestBuilder::new(format!("v1/artists/{}", id), Method::Get, None);
+        let request = &RequestBuilder::new(format!("v1/artists/{id}"), Method::Get, None);
         let result = self.load_cached(request, "artist", id)?;
         Ok(result.data)
     }
 
     // https://developer.spotify.com/documentation/web-api/reference/get-an-artists-albums/
     pub fn get_artist_albums(&self, id: &str) -> Result<ArtistAlbums, Error> {
-        let request = &RequestBuilder::new(format!("v1/artists/{}/albums", id), Method::Get, None)
+        let request = &RequestBuilder::new(format!("v1/artists/{id}/albums"), Method::Get, None)
             .query("market", "from_token");
         let result: Vector<Arc<Album>> = self.load_all_pages(request)?;
 
@@ -762,7 +764,7 @@ impl WebApi {
             tracks: Vector<Arc<Track>>,
         }
         let request =
-            &RequestBuilder::new(format!("v1/artists/{}/top-tracks", id), Method::Get, None)
+            &RequestBuilder::new(format!("v1/artists/{id}/top-tracks"), Method::Get, None)
                 .query("market", "from_token");
         let result: Tracks = self.load(request)?;
         Ok(result.tracks)
@@ -775,7 +777,7 @@ impl WebApi {
             artists: Vector<Artist>,
         }
         let request = &RequestBuilder::new(
-            format!("v1/artists/{}/related-artists", id),
+            format!("v1/artists/{id}/related-artists"),
             Method::Get,
             None,
         );
@@ -902,7 +904,7 @@ impl WebApi {
 impl WebApi {
     // https://developer.spotify.com/documentation/web-api/reference/get-an-album/
     pub fn get_album(&self, id: &str) -> Result<Cached<Arc<Album>>, Error> {
-        let request = &RequestBuilder::new(format!("v1/albums/{}", id), Method::Get, None)
+        let request = &RequestBuilder::new(format!("v1/albums/{id}"), Method::Get, None)
             .query("market", "from_token");
         let result = self.load_cached(request, "album", id)?;
         Ok(result)
@@ -913,7 +915,7 @@ impl WebApi {
 impl WebApi {
     // https://developer.spotify.com/documentation/web-api/reference/get-a-show/Add commentMore actions
     pub fn get_show(&self, id: &str) -> Result<Cached<Arc<Show>>, Error> {
-        let request = &RequestBuilder::new(format!("v1/shows/{}", id), Method::Get, None)
+        let request = &RequestBuilder::new(format!("v1/shows/{id}"), Method::Get, None)
             .query("market", "from_token");
 
         let result = self.load_cached(request, "show", id)?;
@@ -940,7 +942,7 @@ impl WebApi {
 
     // https://developer.spotify.com/documentation/web-api/reference/get-a-shows-episodes
     pub fn get_show_episodes(&self, id: &str) -> Result<Vector<Arc<Episode>>, Error> {
-        let request = &RequestBuilder::new(format!("v1/shows/{}/episodes", id), Method::Get, None)
+        let request = &RequestBuilder::new(format!("v1/shows/{id}/episodes"), Method::Get, None)
             .query("market", "from_token");
 
         let mut results = Vector::new();
@@ -971,7 +973,7 @@ impl WebApi {
 
     pub fn get_track_credits(&self, track_id: &str) -> Result<TrackCredits, Error> {
         let request = &RequestBuilder::new(
-            format!("track-credits-view/v0/experimental/{}/credits", track_id),
+            format!("track-credits-view/v0/experimental/{track_id}/credits"),
             Method::Get,
             None,
         )
@@ -1032,14 +1034,15 @@ impl WebApi {
 
     // https://developer.spotify.com/documentation/web-api/reference/save-albums-user/
     pub fn save_album(&self, id: &str) -> Result<(), Error> {
-        let request = &RequestBuilder::new("v1/me/albums", Method::Put, None).query("ids", id);
+        let request = &RequestBuilder::new("v1/me/albums", Method::Put, Some(json!({"ids": id})));
 
         self.send_empty_json(request)
     }
 
     // https://developer.spotify.com/documentation/web-api/reference/remove-albums-user/
     pub fn unsave_album(&self, id: &str) -> Result<(), Error> {
-        let request = &RequestBuilder::new("v1/me/albums", Method::Delete, None).query("ids", id);
+        let request =
+            &RequestBuilder::new("v1/me/albums", Method::Delete, Some(json!({"ids": id})));
         self.send_empty_json(request)
     }
 
@@ -1077,13 +1080,13 @@ impl WebApi {
 
     // https://developer.spotify.com/documentation/web-api/reference/save-tracks-user/
     pub fn save_track(&self, id: &str) -> Result<(), Error> {
-        let request = &RequestBuilder::new("v1/me/tracks", Method::Get, None).query("ids", id);
+        let request = &RequestBuilder::new("v1/me/tracks", Method::Put, None).query("ids", id);
         self.send_empty_json(request)
     }
 
     // https://developer.spotify.com/documentation/web-api/reference/remove-tracks-user/
     pub fn unsave_track(&self, id: &str) -> Result<(), Error> {
-        let request = &RequestBuilder::new("v1/me/tracks", Method::Get, None).query("ids", id);
+        let request = &RequestBuilder::new("v1/me/tracks", Method::Delete, None).query("ids", id);
         self.send_empty_json(request)
     }
 
@@ -1209,7 +1212,7 @@ impl WebApi {
 
     pub fn follow_playlist(&self, id: &str) -> Result<(), Error> {
         let request =
-            &RequestBuilder::new(format!("v1/playlists/{}/followers", id), Method::Put, None)
+            &RequestBuilder::new(format!("v1/playlists/{id}/followers"), Method::Put, None)
                 .set_body(Some(json!({"public": false})));
         self.request(request)?;
         Ok(())
@@ -1217,7 +1220,7 @@ impl WebApi {
 
     pub fn unfollow_playlist(&self, id: &str) -> Result<(), Error> {
         let request = &RequestBuilder::new(
-            format!("v1/playlists/{}/followers", id),
+            format!("v1/playlists/{id}/followers"),
             Method::Delete,
             None,
         );
@@ -1227,7 +1230,7 @@ impl WebApi {
 
     // https://developer.spotify.com/documentation/web-api/reference/get-playlist
     pub fn get_playlist(&self, id: &str) -> Result<Playlist, Error> {
-        let request = &RequestBuilder::new(format!("v1/playlists/{}", id), Method::Get, None);
+        let request = &RequestBuilder::new(format!("v1/playlists/{id}"), Method::Get, None);
         let result: Playlist = self.load(request)?;
         Ok(result)
     }
@@ -1250,7 +1253,7 @@ impl WebApi {
         }
 
         let request =
-            &RequestBuilder::new(format!("v1/playlists/{}/tracks", id), Method::Get, None)
+            &RequestBuilder::new(format!("v1/playlists/{id}/tracks"), Method::Get, None)
                 .query("marker", "from_token")
                 .query("additional_types", "track");
 
@@ -1274,7 +1277,7 @@ impl WebApi {
 
     pub fn change_playlist_details(&self, id: &str, name: &str) -> Result<(), Error> {
         let request =
-            &RequestBuilder::new(format!("v1/playlists/{}/tracks", id), Method::Get, None)
+            &RequestBuilder::new(format!("v1/playlists/{id}/tracks"), Method::Get, None)
                 .set_body(Some(json!({ "name": name })));
         self.request(request)?;
         Ok(())
@@ -1283,7 +1286,7 @@ impl WebApi {
     // https://developer.spotify.com/documentation/web-api/reference/add-tracks-to-playlist
     pub fn add_track_to_playlist(&self, playlist_id: &str, track_uri: &str) -> Result<(), Error> {
         let request = &RequestBuilder::new(
-            format!("v1/playlists/{}/tracks", playlist_id),
+            format!("v1/playlists/{playlist_id}/tracks"),
             Method::Post,
             None,
         )
@@ -1298,7 +1301,7 @@ impl WebApi {
         track_pos: usize,
     ) -> Result<(), Error> {
         let request = &RequestBuilder::new(
-            format!("v1/playlists/{}/tracks", playlist_id),
+            format!("v1/playlists/{playlist_id}/tracks"),
             Method::Delete,
             None,
         )
@@ -1432,7 +1435,7 @@ impl WebApi {
     // https://developer.spotify.com/documentation/web-api/reference/get-audio-analysis/
     pub fn _get_audio_analysis(&self, track_id: &str) -> Result<AudioAnalysis, Error> {
         let request =
-            &RequestBuilder::new(format!("v1/audio-analysis/{}", track_id), Method::Get, None);
+            &RequestBuilder::new(format!("v1/audio-analysis/{track_id}"), Method::Get, None);
         let result = self.load_cached(request, "audio-analysis", track_id)?;
         Ok(result.data)
     }
@@ -1478,6 +1481,7 @@ impl WebApi {
         let format = match infer::get(body.as_slice()) {
             Some(kind) if kind.mime_type() == "image/jpeg" => Some(ImageFormat::Jpeg),
             Some(kind) if kind.mime_type() == "image/png" => Some(ImageFormat::Png),
+            Some(kind) if kind.mime_type() == "image/webp" => Some(ImageFormat::WebP),
             _ => None,
         };
 
@@ -1597,7 +1601,7 @@ impl RequestBuilder {
                 &self
                     .queries
                     .iter()
-                    .map(|(k, v)| format!("{}={}", k, v))
+                    .map(|(k, v)| format!("{k}={v}"))
                     .collect::<Vec<_>>()
                     .join("&"),
             );
